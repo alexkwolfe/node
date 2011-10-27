@@ -60,6 +60,7 @@ public:
   static Handle<Value> RecvStart(const Arguments& args);
   static Handle<Value> RecvStop(const Arguments& args);
   static Handle<Value> GetSockName(const Arguments& args);
+  static Handle<Value> SetBroadcast(const Arguments& args);
 
 private:
   UDPWrap(Handle<Object> object);
@@ -113,6 +114,7 @@ void UDPWrap::Initialize(Handle<Object> target) {
   NODE_SET_PROTOTYPE_METHOD(t, "recvStart", RecvStart);
   NODE_SET_PROTOTYPE_METHOD(t, "recvStop", RecvStop);
   NODE_SET_PROTOTYPE_METHOD(t, "getsockname", GetSockName);
+  NODE_SET_PROTOTYPE_METHOD(t, "setBroadcast", SetBroadcast);
 
   target->Set(String::NewSymbol("UDP"),
               Persistent<FunctionTemplate>::New(t)->GetFunction());
@@ -170,6 +172,21 @@ Handle<Value> UDPWrap::Bind6(const Arguments& args) {
   return DoBind(args, AF_INET6);
 }
 
+Handle<Value> UDPWrap::SetBroadcast(const Arguments& args) {
+  HandleScope scope;
+  UNWRAP
+  printf("hello1");
+  assert(args.Length() == 1);
+  printf("hello2");
+  int on = args[0]->Uint32Value();
+  printf("hello3");
+  int r = uv_udp_set_broadcast(&wrap->handle_, on);
+  printf("hello4");
+  if (r)
+    SetErrno(uv_last_error(uv_default_loop()));
+  printf("hello5");
+  return scope.Close(Integer::New(r));
+}
 
 Handle<Value> UDPWrap::DoSend(const Arguments& args, int family) {
   HandleScope scope;
