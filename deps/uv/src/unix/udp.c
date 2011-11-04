@@ -501,7 +501,7 @@ int uv_udp_set_broadcast(uv_udp_t* handle, int on) {
     uv__set_sys_error(handle->loop, errno);
     return -1;
   }
-  
+
   if (setsockopt(handle->fd, IPPROTO_IP, SO_BROADCAST, &on, sizeof on) == -1) {
     uv__set_sys_error(handle->loop, errno);
     return -1;

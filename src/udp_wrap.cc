@@ -196,16 +196,15 @@ Handle<Value> UDPWrap::Bind6(const Arguments& args) {
 Handle<Value> UDPWrap::SetBroadcast(const Arguments& args) {
   HandleScope scope;
   UNWRAP
-  printf("hello1");
+
   assert(args.Length() == 1);
-  printf("hello2");
+
   int on = args[0]->Uint32Value();
-  printf("hello3");
   int r = uv_udp_set_broadcast(&wrap->handle_, on);
-  printf("hello4");
+
   if (r)
     SetErrno(uv_last_error(uv_default_loop()));
-  printf("hello5");
+
   return scope.Close(Integer::New(r));
 }
 
