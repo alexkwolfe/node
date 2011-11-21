@@ -19,6 +19,7 @@ set nobuild=
 set test=
 set test_args=
 set msi=
+set upload=
 
 :next-arg
 if "%1"=="" goto args-done
@@ -35,10 +36,14 @@ if /i "%1"=="test-message" set test=test-message&goto arg-ok
 if /i "%1"=="test-all"     set test=test-all&goto arg-ok
 if /i "%1"=="test"         set test=test&goto arg-ok
 if /i "%1"=="msi"          set msi=1&goto arg-ok
+if /i "%1"=="upload"       set upload=1&goto arg-ok
+
+
 :arg-ok
 shift
 goto next-arg
 :args-done
+if defined upload goto upload
 
 
 :project-gen
@@ -75,10 +80,10 @@ if errorlevel 1 goto exit
 :msi
 @rem Skip msi generation if not requested
 if not defined msi goto run
-python "%~dp0tools\msi\getnodeversion.py" < "%~dp0src\node_version.h" > "%temp%\node_version.txt"
+python "%~dp0tools\getnodeversion.py" > "%temp%\node_version.txt"
 if not errorlevel 0 echo Cannot determine current version of node.js & goto exit
 for /F "tokens=*" %%i in (%temp%\node_version.txt) do set NODE_VERSION=%%i
-msbuild "%~dp0tools\msi\nodemsi.sln" /t:Clean,Build /p:Configuration=%config% /p:NodeVersion=%NODE_VERSION% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
+msbuild "%~dp0tools\msvs\msi\nodemsi.sln" /t:Clean,Build /p:Configuration=%config% /p:NodeVersion=%NODE_VERSION% /clp:NoSummary;NoItemAndPropertyList;Verbosity=minimal /nologo
 if errorlevel 1 goto exit
 
 :run
@@ -89,7 +94,6 @@ if "%config%"=="Debug" set test_args=--mode=debug
 if "%config%"=="Release" set test_args=--mode=release
 
 if "%test%"=="test" set test_args=%test_args% simple message
-if "%test%"=="test-uv" set test_args=%test_args% --libuv simple
 if "%test%"=="test-internet" set test_args=%test_args% internet
 if "%test%"=="test-pummel" set test_args=%test_args% pummel
 if "%test%"=="test-simple" set test_args=%test_args% simple
@@ -104,13 +108,25 @@ goto exit
 echo Failed to create vc project files. 
 goto exit
 
+:upload
+echo uploading .exe .msi .pdb to nodejs.org
+python "%~dp0tools\getnodeversion.py" > "%temp%\node_version.txt"
+if not errorlevel 0 echo Cannot determine current version of node.js & goto exit
+for /F "tokens=*" %%i in (%temp%\node_version.txt) do set NODE_VERSION=%%i
+@echo on
+ssh node@nodejs.org mkdir -p web/nodejs.org/dist/v%NODE_VERSION%
+scp Release\node.msi node@nodejs.org:~/web/nodejs.org/dist/v%NODE_VERSION%/node-v%NODE_VERSION%.msi
+scp Release\node.exe node@nodejs.org:~/web/nodejs.org/dist/v%NODE_VERSION%/node.exe
+scp Release\node.pdb node@nodejs.org:~/web/nodejs.org/dist/v%NODE_VERSION%/node.pdb
+@echo off
+goto exit
+
 :help
 echo vcbuild.bat [debug/release] [msi] [test-all/test-uv/test-internet/test-pummel/test-simple/test-message] [clean] [noprojgen] [nobuild]
 echo Examples:
 echo   vcbuild.bat                : builds debug build
 echo   vcbuild.bat release msi    : builds release build and MSI installer package
 echo   vcbuild.bat test           : builds debug build and runs tests
-echo   vcbuild.bat release test-uv: builds release build and runs --libuv tests
 goto exit
 
 :exit

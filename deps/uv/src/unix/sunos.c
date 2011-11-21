@@ -30,10 +30,13 @@
 
 #include <sys/loadavg.h>
 #include <sys/time.h>
-#include <sys/port.h>
 #include <unistd.h>
 #include <kstat.h>
-#include <port.h>
+
+#if HAVE_PORTS_FS
+# include <sys/port.h>
+# include <port.h>
+#endif
 
 
 uint64_t uv_hrtime() {
@@ -85,6 +88,7 @@ void uv_loadavg(double avg[3]) {
 }
 
 
+#if HAVE_PORTS_FS
 static void uv__fs_event_rearm(uv_fs_event_t *handle) {
   if (port_associate(handle->fd,
                      PORT_SOURCE_FILE,
@@ -137,8 +141,12 @@ static void uv__fs_event_read(EV_P_ ev_io* w, int revents) {
 int uv_fs_event_init(uv_loop_t* loop,
                      uv_fs_event_t* handle,
                      const char* filename,
-                     uv_fs_event_cb cb) {
+                     uv_fs_event_cb cb,
+                     int flags) {
   int portfd;
+
+  /* We don't support any flags yet. */
+  assert(!flags);
 
   if ((portfd = port_create()) == -1) {
     uv__set_sys_error(loop, errno);
@@ -169,3 +177,21 @@ void uv__fs_event_destroy(uv_fs_event_t* handle) {
   handle->filename = NULL;
   handle->fo.fo_name = NULL;
 }
+
+#else /* !HAVE_PORTS_FS */
+
+int uv_fs_event_init(uv_loop_t* loop,
+                     uv_fs_event_t* handle,
+                     const char* filename,
+                     uv_fs_event_cb cb,
+                     int flags) {
+  uv__set_sys_error(loop, ENOSYS);
+  return -1;
+}
+
+
+void uv__fs_event_destroy(uv_fs_event_t* handle) {
+  assert(0 && "unreachable"); /* should never be called */
+}
+
+#endif /* HAVE_PORTS_FS */

@@ -88,7 +88,7 @@
       // channel.
       if (process.env.NODE_WORKER_ID) {
         var cluster = NativeModule.require('cluster');
-        cluster.startWorker();
+        cluster._startWorker();
       }
 
       var Module = NativeModule.require('module');
@@ -208,6 +208,16 @@
     };
   };
 
+  function errnoException(errorno, syscall) {
+    // TODO make this more compatible with ErrnoException from src/node.cc
+    // Once all of Node is using this function the ErrnoException from
+    // src/node.cc should be removed.
+    var e = new Error(syscall + ' ' + errorno);
+    e.errno = e.code = errorno;
+    e.syscall = syscall;
+    return e;
+  }
+
   function createWritableStdioStream(fd) {
     var stream;
     var tty_wrap = process.binding('tty_wrap');
@@ -229,7 +239,7 @@
 
       case 'FILE':
         var fs = NativeModule.require('fs');
-        stream = new fs.WriteStream(null, { fd: fd });
+        stream = new fs.SyncWriteStream(fd);
         stream._type = 'fs';
         break;
 
@@ -259,6 +269,8 @@
     // For supporting legacy API we put the FD here.
     stream.fd = fd;
 
+    stream._isStdio = true;
+
     return stream;
   }
 
@@ -268,12 +280,18 @@
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
       stdout = createWritableStdioStream(1);
+      stdout.end = stdout.destroy = stdout.destroySoon = function() {
+        throw new Error('process.stdout cannot be closed');
+      };
       return stdout;
     });
 
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
       stderr = createWritableStdioStream(2);
+      stderr.end = stderr.destroy = stderr.destroySoon = function() {
+        throw new Error('process.stderr cannot be closed');
+      };
       return stderr;
     });
 
@@ -318,34 +336,30 @@
   };
 
   startup.processKillAndExit = function() {
-    var isWindows = process.platform === 'win32';
-
     process.exit = function(code) {
       process.emit('exit', code || 0);
       process.reallyExit(code || 0);
     };
 
-    if (isWindows) {
-      process.kill = function(pid, sig) {
-        console.warn('process.kill() is not supported on Windows.  Use ' +
-                     'child.kill() to kill a process that was started '  +
-                     'with child_process.spawn().');
-      }
-    } else {
-      process.kill = function(pid, sig) {
-        // preserve null signal
-        if (0 === sig) {
-          process._kill(pid, 0);
+    process.kill = function(pid, sig) {
+      var r;
+
+      // preserve null signal
+      if (0 === sig) {
+        r = process._kill(pid, 0);
+      } else {
+        sig = sig || 'SIGTERM';
+        if (startup.lazyConstants()[sig]) {
+          r = process._kill(pid, startup.lazyConstants()[sig]);
         } else {
-          sig = sig || 'SIGTERM';
-          if (startup.lazyConstants()[sig]) {
-            process._kill(pid, startup.lazyConstants()[sig]);
-          } else {
-            throw new Error('Unknown signal: ' + sig);
-          }
+          throw new Error('Unknown signal: ' + sig);
         }
-      };
-    }
+      }
+
+      if (r) {
+        throw errnoException(errno, 'kill');
+      }
+    };
   };
 
   startup.processSignalHandlers = function() {
