@@ -32,7 +32,7 @@ var common = require('../common'),
       new Buffer('Second message to send'),
       new Buffer('Third message to send'),
       new Buffer('Fourth message to send')
-  ];
+    ];
 
 if (cluster.isMaster) {
   var workers = {},
