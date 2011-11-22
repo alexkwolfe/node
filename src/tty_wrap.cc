@@ -116,7 +116,7 @@ class TTYWrap : StreamWrap {
 
   static Handle<Value> GetWindowSize(const Arguments& args) {
     HandleScope scope;
-    
+
     UNWRAP
 
     int width, height;
@@ -176,4 +176,4 @@ class TTYWrap : StreamWrap {
 
 }  // namespace node
 
-NODE_MODULE(node_tty_wrap, node::TTYWrap::Initialize);
+NODE_MODULE(node_tty_wrap, node::TTYWrap::Initialize)

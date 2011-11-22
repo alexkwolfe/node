@@ -268,6 +268,8 @@ static wchar_t* search_path(const wchar_t *file,
   wchar_t* result = NULL;
   wchar_t *file_name_start;
   wchar_t *dot;
+  const wchar_t *dir_start, *dir_end, *dir_path;
+  int dir_len;
   int name_has_ext;
 
   int file_len = wcslen(file);
@@ -305,8 +307,7 @@ static wchar_t* search_path(const wchar_t *file,
         name_has_ext);
 
   } else {
-    const wchar_t *dir_start,
-                *dir_end = path;
+    dir_end = path;
 
     /* The file is really only a name; look in cwd first, then scan path */
     result = path_search_walk_ext(L"", 0,
@@ -338,7 +339,20 @@ static wchar_t* search_path(const wchar_t *file,
         continue;
       }
 
-      result = path_search_walk_ext(dir_start, dir_end - dir_start,
+      dir_path = dir_start;
+      dir_len = dir_end - dir_start;
+
+      /* Adjust if the path is quoted. */
+      if (dir_path[0] == '"' || dir_path[0] == '\'') {
+        ++dir_path;
+        --dir_len;
+      }
+
+      if (dir_path[dir_len - 1] == '"' || dir_path[dir_len - 1] == '\'') {
+        --dir_len;
+      }
+
+      result = path_search_walk_ext(dir_path, dir_len,
                                     file, file_len,
                                     cwd, cwd_len,
                                     name_has_ext);
@@ -1068,14 +1082,17 @@ static uv_err_t uv__kill(HANDLE process_handle, int signum) {
     }
   } else if (signum == 0) {
     /* Health check: is the process still alive? */
-    if (GetExitCodeProcess(process_handle, &status) &&
-        status == STILL_ACTIVE) {
-      err =  uv_ok_;
+    if (GetExitCodeProcess(process_handle, &status)) {
+      if (status == STILL_ACTIVE) {
+        err =  uv_ok_;
+      } else {
+        err = uv__new_artificial_error(UV_ESRCH);
+      }
     } else {
       err = uv__new_sys_error(GetLastError());
     }
   } else {
-    err.code = UV_ENOSYS;
+    err = uv__new_artificial_error(UV_ENOSYS);
   }
 
   return err;
@@ -1108,8 +1125,12 @@ uv_err_t uv_kill(int pid, int signum) {
   HANDLE process_handle = OpenProcess(PROCESS_TERMINATE |
     PROCESS_QUERY_INFORMATION, FALSE, pid);
 
-  if (process_handle == INVALID_HANDLE_VALUE) {
-    return uv__new_sys_error(GetLastError());
+  if (process_handle == NULL) {
+    if (GetLastError() == ERROR_INVALID_PARAMETER) {
+      return uv__new_artificial_error(UV_ESRCH);
+    } else {
+      return uv__new_sys_error(GetLastError());
+    }
   }
 
   err = uv__kill(process_handle, signum);
